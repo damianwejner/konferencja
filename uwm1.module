@@ -1,0 +1,337 @@
+﻿<?php
+function uwm1_menu() {
+    $items['uwm1'] = array(
+        'title' => 'Formularz zapisu uwm1',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => array('uwm1_nameform'),
+        'access callback' => TRUE,
+        'type' => MENU_NORMAL_ITEM
+    );
+    return $items;
+}
+
+function uwm1_table_query() {
+    $results = db_query('SELECT title FROM {node} WHERE type = :type', array(':type' => 'uwm1'));
+    foreach ($results as $result) {
+        $options[$result->title] = $result->title;
+    }
+    return $options;
+}
+
+
+function uwm1_nameform() {
+    
+    $form['name'] = array(
+        '#title' => t('Twoje imię i nazwisko'),
+        '#type' => 'fieldset',
+        '#description' => t('Jak masz na imię i nazwisko.'),
+        
+        
+    );
+    $form['name']['user_name'] = array(
+        '#title' => t('Twoje imię i nazwisko'),
+        '#type' => 'textfield',
+        '#description' => t('Wprowadź swoje imię i nazwisko.'),
+        '#required' => TRUE,
+    );
+    $form['email']['wpisz'] = array(
+        '#title' => t('Twoj email'),
+        '#type' => 'textfield',
+        '#description' => t('Wprowadź swój email.'),
+        '#required' => TRUE,
+    );
+    $form['konferencja'] = array(
+        '#title' => t('Konferencja'),
+        '#type' => 'fieldset',
+        '#description' => t('Ten zestaw pól zawiera konferencje.'),
+        '#collapsible' => TRUE,
+        '#collapsed' => FALSE
+    );
+  
+    $result = db_query('SELECT title FROM {node} WHERE type = :type', array(':type' => 'uwm1'));
+    foreach($result as $row) {
+        echo $row->title."<br/>";
+    }
+    $form['konferencja']['wydarzenie'] = array(
+        '#title' => t('Wybrana konferencja'),
+        '#type' =>'select',
+        '#description' => t('Wybierz konferencje z listy '),
+        '#options' => uwm1_table_query() 
+    );
+    $form['submit'] = array(
+        '#type' => 'submit',
+        '#value' => t('Wyślij')
+    );
+
+    return $form;
+}
+
+function uwm1_nameform_validate($form, &$form_state) {
+    $licznikmalp = 0;
+    $licznikkropek = 0;
+    for($h=0;$h<strlen($form_state['values']['wpisz']);$h++)
+    {
+      
+       if(($form_state['values']['wpisz'][$h]) == '@')
+           $licznikmalp++;
+           if(($form_state['values']['wpisz'][$h]) == '.')
+               $licznikkropek++;
+    }
+    if(($licznikkropek <1) || ($licznikmalp <1))
+        form_set_error('wpisz',
+            t('Pomyłka w emailu'));
+}
+
+function uwm1_nameform_submit($form, &$form_state) {
+    $name = $form_state['values']['user_name'];
+    $email = $form_state['values']['wpisz'];
+    $konferencja = $form_state['values']['wydarzenie'];
+    $results = db_query('SELECT count(konferencja) FROM {uwm1} WHERE konferencja = :konferencja', array(':konferencja' => $konferencja))->fetchField();
+    $numerkonferencji = db_query('SELECT nid FROM {node} WHERE title = :title', array(':title' => $konferencja))->fetchField();
+    $limit = db_query('SELECT field_limitmiejsc_value FROM {field_data_field_limitmiejsc} WHERE entity_id = :entity_id', array(':entity_id' => $numerkonferencji))->fetchField();
+    
+    if($results < $limit)
+    {
+    $insert = db_insert('uwm1')
+    ->fields(array(
+        'user_name' => $name,
+        'mail' => $email,
+        'konferencja' => $konferencja,
+    ))
+    ->execute();
+    drupal_set_message(t('Dziękujemy Ci, %name, email: %email za wypełnienie formularza. I wpisanie się na wydarzenie: %konferencja (Zapisanych: %results --Nr. konferencji: %numerkonferencji --Limit: %limit)',
+        array('%name' => $name, '%email' => $email, '%konferencja'=> $konferencja, '%results' => $results, '%numerkonferencji' => $numerkonferencji , '%limit' => $limit)));
+    }
+    else 
+        drupal_set_message(t('Przykro nam %name, limit zapisów się wyczerpał',
+            array('%name' => $name,)));
+    
+}   
+function uwm1_node_info() {
+   
+    return array(
+        'uwm1' => array(
+            'name' => t('Ogłoszenie UWMTEST1'),
+            'base' => 'uwm1',
+            'description' => t('Ten rodzaj zawartości pozwala na wysyłanie ogłoszeń uwm.'),
+            'has_title' => TRUE,
+            'title_label' => t('Wydarzenie'),
+            'help' => t('Wprowadź opis wydarzenia'),
+        ),
+    );
+}
+/**
+ * Implementacja haka hook_menu_alter().
+ */
+function uwm1_menu_alter(&$callbacks) {
+ 
+    if (!user_access('administer nodes')) {
+        $callbacks['node/add/uwm1']['access callback'] = FALSE;
+       
+        unset($callbacks['node/add/uwm1']['access arguments']);
+    }
+}
+/**
+ * Implementacja haka hook_permission().
+ */
+function uwm1_permission() {
+    return array(
+        'create uwm1' => array(
+            'title' => t('Utwórz ogłoszenie uwm1'),
+            'description' => t('Utwórz uwm1'),
+        ),
+        'edit own umw' => array(
+            'title' => t('Edytuj swoje ogłoszenie umw'),
+            'description' => t('Edytuj swoje ogłoszenie uwm1'),
+        ),
+        'delete own uwm1' => array(
+            'title' => t('Usuń swoje ogłoszenie uwm1'),
+            'description' => t('Usuń swoje umw'),
+        ),
+        'delete any uwm1' => array(
+            'title' => t('Usuń dowolne ogłoszenie umw umw'),
+            'description' => t('Usuń dowolne ogłoszenie umw'),
+        ),
+    );
+}
+/**
+ * Implementacja haka hook_node_access().
+ */
+function uwm1_node_access($op, $node, $account) {
+    $is_author = $account->uid == $node->uid;
+    switch ($op) {
+        case 'create':
+            
+            if (user_access('create ', $account)) {
+                return NODE_ACCESS_ALLOW;
+            }
+        case 'update':
+           
+            if (user_access('edit own ', $account) && $is_author ||
+            user_access('edit any job', $account)) {
+                return NODE_ACCESS_ALLOW;
+            }
+        case 'delete':
+           
+            if (user_access('delete own ', $account) && $is_author ||
+            user_access('delete any ', $account)) {
+                return NODE_ACCESS_ALLOW;
+            }
+    }
+}
+/**
+ * Implementacja haka hook_form() generująca standardowy, domyślny formularz.
+ */
+function uwm1_form($node, $form_state) {
+   
+    return node_content_form($node, $form_state);
+}
+/**
+ * Implementacja haka hook_validate().
+ */
+function uwm1_validate($node) {
+    /**
+     * Walidacja jednostki
+     */
+  
+    if (isset($node->uwm1_company) &&
+        strlen($node->uwm1_company['und'][0]['value']) < 2) {
+            form_set_error('uwm1_company', t('Nazwa jednostki jest za krótka. Musi ona zawierać co najmniej
+        dwa znaki.'), $limit_validation_errors = NULL);
+    }
+        
+    /**
+     * Walidacja daty wydarzenia.
+     */
+                if (isset($node->field_datawydarzenia) &&
+                strlen($node->field_datawydarzenia['und'][0]['value']) < 8 ||
+                strlen($node->field_datawydarzenia['und'][0]['value']) > 8) 
+                {
+                    form_set_error('field_datawydarzenia', t('Przyklad poprawnej daty 09.09.17'), $limit_validation_errors = NULL);
+                }
+                
+                for($i=0;$i<2;$i++){
+                if(!is_numeric($node->field_datawydarzenia['und'][0]['value'][$i]))
+                {
+                        form_set_error('field_datawydarzenia', t('Hej pierwsze dwie literki mogą nie są liczbą.Przyklad poprawnej daty 09.09.17'), $limit_validation_errors = NULL);
+                }
+                }
+                if((($node->field_datawydarzenia['und'][0]['value'][0]) >"3") || (($node->field_datawydarzenia['und'][0]['value'][0]) <"0"))
+                {
+                    form_set_error('field_datawydarzenia', t('Jest max 31 dni w miesiącu :).Przyklad poprawnej daty 09.09.17'), $limit_validation_errors = NULL);
+                }
+                for($i=3;$i<5;$i++){
+                  if(!is_numeric($node->field_datawydarzenia['und'][0]['value'][$i]))
+                        {
+                            form_set_error('field_datawydarzenia', t('Hej czwarta lub piąta literka nie są liczbami.Przyklad poprawnej daty 09.09.17'), $limit_validation_errors = NULL);
+                        }
+                    }
+                if((($node->field_datawydarzenia['und'][0]['value'][3]) >"1") || (($node->field_datawydarzenia['und'][0]['value'][3]) <"0"))
+                {
+                        form_set_error('field_datawydarzenia', t('Jest 12 miesięcy :).Przyklad poprawnej daty 09.09.17'), $limit_validation_errors = NULL);
+                }
+                for($i=6;$i<8;$i++){
+                        if(!is_numeric($node->field_datawydarzenia['und'][0]['value'][$i]))
+                        {
+                            form_set_error('field_datawydarzenia', t('Hej siódma lub ósma literka nie są liczbami.Przyklad poprawnej daty 09.09.17'), $limit_validation_errors = NULL);
+                        }
+                 }
+                    
+                 if(($node->field_datawydarzenia['und'][0]['value'][2] != "." )|| 
+                       ($node->field_datawydarzenia['und'][0]['value'][5] != "."))
+                 {
+                        form_set_error('field_datawydarzenia', t('Na trzecim lub piątym miejscu stoi kropka.Przyklad poprawnej daty 09.09.17'), $limit_validation_errors = NULL);
+                 }
+                 /**
+                  * Walidacja godziny wydarzenia.
+                  */
+                 
+                     if (isset($node->field_godzina) &&
+                         strlen($node->field_godzina['und'][0]['value']) < 5 ||
+                         strlen($node->field_godzina['und'][0]['value']) > 5)
+                     {
+                         form_set_error('field_godzina', t('Przyklad poprawnej godziny 07:22'), $limit_validation_errors = NULL);
+                     }
+                     for($i=0;$i<2;$i++){
+                         if(!is_numeric($node->field_godzina['und'][0]['value'][$i]))
+                         {
+                             form_set_error('field_godzina', t('Hej pierwsze dwie literki mogą nie są liczbą.Przyklad poprawnej godziny 20:22'), $limit_validation_errors = NULL);
+                         }
+                     }
+                     for($i=3;$i<5;$i++){
+                         if(!is_numeric($node->field_godzina['und'][0]['value'][$i]))
+                         {
+                             form_set_error('field_godzina', t('Hej czwarta lub piąta literka nie są liczbami.Przyklad poprawnej godziny 05:00'), $limit_validation_errors = NULL);
+                         }
+                     }
+                     if($node->field_godzina['und'][0]['value'][2] != ":" )
+                     {
+                         form_set_error('field_godzina', t('Na trzecim miejscu jest dwukropek.Przyklad poprawnej godziny 18:30'), $limit_validation_errors = NULL);
+                     }
+                     if(($node->field_godzina['und'][0]['value'][0]) <"0" || ($node->field_godzina['und'][0]['value'][0]) >"2" ||
+                         ($node->field_godzina['und'][0]['value'][3]) >"5" ||($node->field_godzina['und'][0]['value'][3]) <"0")
+                     {
+                         form_set_error('field_godzina', t('Zła godzina.Przyklad poprawnej godziny 20:22'), $limit_validation_errors = NULL);
+                     }
+                     
+                     
+}
+
+
+function uwm1_insert($node) {
+
+watchdog('jednostka uwm1', 'Dodano nowe ogłoszenie umw zatytułowane: '.$node->title.' dla jednostki: '.
+    $node->uwm1_company['und'][0]['value'].
+' zostało dodane przez użytkownika o identyfikatorze UID: '.$node->uid,
+$variables = array(),
+WATCHDOG_NOTICE, $link = 'node/'.$node->nid);
+}
+
+function uwm1_update($node) {
+
+watchdog('jednostka uwm1', 'Ogłoszenie uwm zatytułowane: '.$node->title.' dla firmy: '.
+    $node->uwm1_company['und'][0]['value'].
+' zostało zmodyfikowane przez użytkownika o UID: '.$node->uid, $variables = array(),
+WATCHDOG_NOTICE, $link = 'node/'.$node->nid);
+}
+/**
+* Implementacja haka hook_delete().
+*/
+function uwm1_delete($node) {
+
+watchdog('jednostka umw', 'Utworzono ogłoszenie
+ zatytułowane: '.$node->title.' dla firmy: '.
+    $node->uwm1_company['und'][0]['value'].
+' został usunięty przez użytkownika o UID: '.$node->uid, $variables = array(),
+WATCHDOG_NOTICE, $link = 'node/'.$node->nid);
+}
+
+function uwm1_load($nodes) {
+
+foreach ($nodes as $node) {
+$node->jednostka = "Ogłoszenia UWM1";
+}
+return $node;
+}
+
+function uwm1_view($node, $view_mode) {
+
+if ($view_mode == 'full') {
+$node->content['jednostka'] = array(
+'#markup' => theme('jednostka', array('jednostka' => $node->jednostka,
+'jednostka_id' => $node->nid)),
+'#weight' => 100,
+);
+}
+return $node;
+}
+
+function uwm1_theme() {
+
+return array(
+'jednostka' => array(
+'variables' => array('jednostka' => NULL, 'jednostka_id' => NULL),
+'template' => 'jednostka',
+),
+);
+}
